@@ -8,6 +8,7 @@ use std::primitive::f64;
 use std::primitive::usize;
 use std::io::ErrorKind;
 use std::str;
+use std::io::Result;
 use anyhow::bail;
 use codemap::Span;
 use errors::*;
@@ -28,7 +29,7 @@ pub enum TokenVariety {
     Usize(usize), // Usize
     Isize(isize),  // Yet to be implemented array
     Asterisk,
-    Carat,
+    Caret,
     Closeparenthesis,
     Openparenthesis,
     Colon,
@@ -40,13 +41,12 @@ pub enum TokenVariety {
     Equal,
     Lessthan,
     Greaterthan,
-    Closedsquare,
-    Opensquare,
+    Closedbracket,
+    Openbracket,
     Closedcurly,
     Opencurly,
     Backslash,
     Forwardslash,
-    End,
     Underscore,
     Pipe,
     Tilde,
@@ -58,7 +58,8 @@ pub enum TokenVariety {
     Question,
     Sinlequote,
     Doublequote,
-    Grave
+    Grave,
+    Dollarsign
 }
 
 pub enum FunctionTokens {
@@ -145,7 +146,7 @@ impl From<isize> for TokenVariety {
     }
 }
 
-fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize), anyhow::Error> {
+fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize)> {
     // identities never start with a num
     match data.chars().next() {
         Some(ch) if ch.is_digit(10) => bail!("Error: Identity cannot start with a number!"),
@@ -160,7 +161,8 @@ fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize), anyhow::E
     Ok((token, bytes_read))
 }
 
-fn get_tokenized_number(data: &str) -> Result<(TokenVariety, usize), anyhow::Error> {
+// Tokenize number
+fn get_tokenized_number(data: &str) -> Result<(TokenVariety, usize)> {
     let mut seen_dot = false;
 
     let (decimal, bytes_read) = take_while(data, |c| {
@@ -215,6 +217,7 @@ fn skip_until<'a>(mut src: &'a str, pattern: &str) -> &'a str {
     &src[pattern.len()..]
 }
 
+// Skip by all whitespace characters and all comments
 fn skip(src: &str) -> usize {
     let mut remaining = src;
 
@@ -231,7 +234,7 @@ fn skip(src: &str) -> usize {
 }
 
 /// Consumes bytes while a predicate evaluates to true.
-fn take_while<F>(data: &str, mut pred: F) -> Result<(&str, usize), anyhow::Error>  
+fn take_while<F>(data: &str, mut pred: F) -> Result<(&str, usize)>  
 where F: FnMut(char) -> bool
 {
     let mut current_index = 0;
@@ -253,4 +256,101 @@ where F: FnMut(char) -> bool
     }
 }
 
+// Get single token from the input
+pub fn single_token_tokenizer(data: &str) -> Result<(TokenVariety, usize)> {
+    let next = match data.chars().next() {
+        Some(c) => c,
+        None => bail!(ErrorKind::UnexpectedEOF),
+    };
 
+    let (token, length) = match next {
+        '.' => (TokenVariety::Dot, 1),
+        '=' => (TokenVariety::Equal, 1),
+        '+' => (TokenVariety::Plus, 1),
+        '-' => (TokenVariety::Minus, 1),
+        '*' => (TokenVariety::Asterisk, 1),
+        '/' => (TokenVariety::Forwardslash, 1),
+        '@' => (TokenVariety::At, 1),
+        '^' => (TokenVariety::Caret, 1),
+        '(' => (TokenVariety::Openparenthesis, 1),
+        ')' => (TokenVariety::Closeparenthesis, 1),
+        '[' => (TokenVariety::Openbracket, 1),
+        ']' => (TokenVariety::Closedbracket, 1),
+        '{' => (TokenVariety::Opencurly, 1),
+        '}' => (TokenVariety::Closedcurly, 1),
+        '_' => (TokenVariety::Underscore, 1),
+        '%' => (TokenVariety::Percent, 1),
+        '&' => (TokenVariety::Ampersand, 1),
+        '#' => (TokenVariety::Pound, 1),
+        '$' => (TokenVariety::Dollarsign, 1),
+        '`' => (TokenVariety::Grave, 1),
+        '~' => (TokenVariety::Tilde, 1),
+        ',' => (TokenVariety::Comma, 1),
+        '<' => (TokenVariety::Lessthan, 1),
+        '>' => (TokenVariety::Greaterthan, 1),
+        '?' => (TokenVariety::Question, 1),
+        '!' => (TokenVariety::Exclamation, 1),
+        '"' => (TokenVariety::Doublequote, 1),
+        '0'..='9' => get_tokenized_number(data).chain_error(|| "Cannot tokenize number data")?,
+        c @ '_' | c if c.is_alphabetic() => get_tokenized_identity(data).chain_err(|| "Cannot tokenize identifier data")?,
+        other => bail!(ErrorKind::UnknownCharacter(other)),
+    };
+
+    Ok((token, length))
+}
+
+struct Tokenizer<'a> {
+    current_index: usize,
+    remaining_text: &'a str,
+}
+
+impl<'a> Tokenizer<'a> {
+    fn new(src: &str) -> Tokenizer {
+        Tokenizer {
+            current_index: 0,
+            remaining_text: src,
+        }
+    }
+
+    fn next_token_up(&mut self) -> Result<Option<(TokenVariety, usize, usize)>> {
+        self.skip_whitespace();
+
+        if self.remaining_text.is_empty() {
+            Ok(None)
+        } else {
+            let start = self.current_index;
+            let token = self._next_token().chain_err(|| ErrorKind::MessageWithLocation(self.current_index, "Cannot read next token"))?;
+            let end = self.current_index;
+            Ok(Some((token, start, end)))
+        }
+    }
+
+    fn skip_whitespace(&mut self) {
+        let skipped = skip(self.remaining_text);
+        self.chomp(skipped);
+    }
+
+    fn _next_token(&mut self) -> Result<TokenVariety> {
+        let (token, bytes_read) = single_token_tokenizer(self.remaining_text)?;
+        self.chomp(bytes_read);
+
+        Ok(token)
+    }
+
+    fn chomp(&mut self, num_bytes: usize) {
+        self.remaining_text = &self.remaining_text[num_bytes];
+        self.current_index += num_bytes;
+    }
+}
+
+// Turn line of valid TVSL into its constituent tokens including its start and end point
+pub fn tokenize(src: &str) -> Result<Vec<(TokenVariety, usize, usize)>> {
+    let mut tokenizer = Tokenizer::new(src);
+    let mut tokens = Vec::new();
+
+    while let Some(token) = tokenizer.next_token_up()? {
+        tokens.push(token);
+    }
+
+    Ok(tokens)
+}
