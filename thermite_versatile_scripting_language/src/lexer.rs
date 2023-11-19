@@ -1,15 +1,46 @@
 // Lexer for the TVSL
 use core::primitive::*;
-use std::array;
 use std::primitive::char;
 use std::primitive::i64;
 use std::primitive::i128;
 use std::primitive::f32;
 use std::primitive::f64;
 use std::primitive::usize;
+use std::str;
+use codemap::Span;
+use errors::*;
 
-#[derive(Debug, Clone, PartialEq)]
+
+
+macro_rules! lexer_test {
+    (FAIL: $name:ident, $func:ident, $src:expr) => {
+        #[cfg(test)]
+        #[test]
+        fn $name() {
+            let src: &str = $src;
+            let func = $func;
+
+            let got = func(src);
+            assert!(got.is_err(), "{:?} should be an error", got);
+        }
+    };
+    ($name:ident, $func:ident, $src:expr => $should_be:expr) => {
+        #[cfg(test)]
+        #[test]
+        fn $name() {
+            let src: &str = $src;
+            let should_be = TokenKind::from($should_be);
+            let func = $func;
+
+            let (got, _bytes_read) = func(src).unwrap();
+            assert_eq!(got, should_be, "Input was {:?}", src);
+        }
+    };
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(missing_docs)]
+#[serde(tag = "type")]
 
 pub enum TokenVariety {
     LInt(i64), // Little Integer
@@ -131,6 +162,41 @@ impl From<isize> for TokenVariety {
     }
 }
 
-pub struct Lexer {
-    
+fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize)> {
+    // identities never start with a num
+    match data.chars().next() {
+        Some(ch) if ch.is_digit(10) => bail!("Error: Identity cannot start with a number!"),
+        None => bail!(ErrorKind::UnexpectedEOF),
+        _ => {}
+    }
+
+    let (got, bytes_read) = take_while(data, |ch| ch == '_' || ch.is_alphanumeric())?;
+
+    // TODO: identify keywords using match
+
+    let token = TokenVariety::Identitystring(got.to_string());
+    Ok((token, bytes_read))
+}
+
+/// Consumes bytes while a predicate evaluates to true.
+fn take_while<F>(data: &str, mut pred: F) -> Result<(&str, usize)>  
+where F: FnMut(char) -> bool
+{
+    let mut current_index = 0;
+
+    for ch in data.chars() {
+        let should_continue = pred(ch);
+
+        if !should_continue {
+            break;
+        }
+
+        current_index += ch.len_utf8();
+    }
+
+    if current_index == 0 {
+        Err("No Matches".into())
+    } else {
+        Ok((&data[..current_index], current_index))
+    }
 }
