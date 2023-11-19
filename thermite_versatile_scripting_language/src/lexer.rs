@@ -1,42 +1,18 @@
 // Lexer for the TVSL
 use core::primitive::*;
+use std::error::Error;
 use std::primitive::char;
 use std::primitive::i64;
 use std::primitive::i128;
 use std::primitive::f32;
 use std::primitive::f64;
 use std::primitive::usize;
+use std::io::ErrorKind;
 use std::str;
+use anyhow::bail;
 use codemap::Span;
 use errors::*;
 
-
-
-macro_rules! lexer_test {
-    (FAIL: $name:ident, $func:ident, $src:expr) => {
-        #[cfg(test)]
-        #[test]
-        fn $name() {
-            let src: &str = $src;
-            let func = $func;
-
-            let got = func(src);
-            assert!(got.is_err(), "{:?} should be an error", got);
-        }
-    };
-    ($name:ident, $func:ident, $src:expr => $should_be:expr) => {
-        #[cfg(test)]
-        #[test]
-        fn $name() {
-            let src: &str = $src;
-            let should_be = TokenKind::from($should_be);
-            let func = $func;
-
-            let (got, _bytes_read) = func(src).unwrap();
-            assert_eq!(got, should_be, "Input was {:?}", src);
-        }
-    };
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(missing_docs)]
@@ -88,6 +64,14 @@ pub enum TokenVariety {
     Sinlequote,
     Doublequote,
     Grave
+}
+
+pub enum FunctionTokens {
+    Funct { // how you enter a method/function
+        name: String,
+        parameters: Vec<char>,
+        outputtype: (i64, i128, f32, f64, String, char, usize, isize, (), u64, u128)
+    }
 }
 
 impl From<String> for TokenVariety {
@@ -162,7 +146,7 @@ impl From<isize> for TokenVariety {
     }
 }
 
-fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize)> {
+fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize), anyhow::Error> {
     // identities never start with a num
     match data.chars().next() {
         Some(ch) if ch.is_digit(10) => bail!("Error: Identity cannot start with a number!"),
@@ -179,7 +163,7 @@ fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize)> {
 }
 
 /// Consumes bytes while a predicate evaluates to true.
-fn take_while<F>(data: &str, mut pred: F) -> Result<(&str, usize)>  
+fn take_while<F>(data: &str, mut pred: F) -> Result<(&str, usize), anyhow::Error>  
 where F: FnMut(char) -> bool
 {
     let mut current_index = 0;
@@ -195,8 +179,10 @@ where F: FnMut(char) -> bool
     }
 
     if current_index == 0 {
-        Err("No Matches".into())
+        bail!("No Matches");
     } else {
         Ok((&data[..current_index], current_index))
     }
 }
+
+
