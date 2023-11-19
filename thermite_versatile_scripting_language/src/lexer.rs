@@ -1,6 +1,5 @@
 // Lexer for the TVSL
 use core::primitive::*;
-use std::error::Error;
 use std::primitive::char;
 use std::primitive::i64;
 use std::primitive::i128;
@@ -19,19 +18,15 @@ use errors::*;
 #[serde(tag = "type")]
 
 pub enum TokenVariety {
-    LInt(i64), // Little Integer
-    BInt(i128), // Big Integer
-    LIntu(u64), // Little Unsigned Integer
-    BIntu(u128), // Big Unsigned Integer
-    Single(f32), // Single Precision
+    Int(i128), // Integer
+    Intu(u128), // Unsigned Integer
     Double(f64), // Double Precision
     Unit(()), // Unit
     Char(char), // Char
     Identitystring(String),
     Quotedstring(String),
     Usize(usize), // Usize
-    Isize(isize),
-    Arr(),   // Yet to be implemented array
+    Isize(isize),  // Yet to be implemented array
     Asterisk,
     Carat,
     Closeparenthesis,
@@ -71,6 +66,28 @@ pub enum FunctionTokens {
         name: String,
         parameters: Vec<char>,
         outputtype: (i64, i128, f32, f64, String, char, usize, isize, (), u64, u128)
+    },
+    Enumerator {
+        name: String
+
+    },
+    Structure {
+        name: String
+    },
+    Ifstatement {
+
+    },
+    Efstatment {
+
+    },
+    Elstatement {
+
+    },
+    Whilestatment {
+
+    },
+    Forstatment {
+
     }
 }
 
@@ -86,21 +103,9 @@ impl<'a> From<&'a str> for TokenVariety {
     }
 }
 
-impl From<i64> for TokenVariety {
-    fn from(dif: i64) -> TokenVariety {
-        TokenVariety::LInt(dif)
-    }
-}
-
 impl From<i128> for TokenVariety {
     fn from(dif: i128) -> TokenVariety {
-        TokenVariety::BInt(dif)
-    }
-}
-
-impl From<f32> for TokenVariety {
-    fn from(dif: f32) -> TokenVariety {
-        TokenVariety::Single(dif)
+        TokenVariety::Int(dif)
     }
 }
 
@@ -110,15 +115,9 @@ impl From<f64> for TokenVariety {
     }
 }
 
-impl From<u64> for TokenVariety {
-    fn from(dif: u64) -> TokenVariety {
-        TokenVariety::LIntu(dif)
-    }
-}
-
 impl From<u128> for TokenVariety {
     fn from(dif: u128) -> TokenVariety {
-        TokenVariety::BIntu(dif)
+        TokenVariety::Intu(dif)
     }
 }
 
@@ -153,13 +152,82 @@ fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize), anyhow::E
         None => bail!(ErrorKind::UnexpectedEOF),
         _ => {}
     }
-
     let (got, bytes_read) = take_while(data, |ch| ch == '_' || ch.is_alphanumeric())?;
 
     // TODO: identify keywords using match
 
     let token = TokenVariety::Identitystring(got.to_string());
     Ok((token, bytes_read))
+}
+
+fn get_tokenized_number(data: &str) -> Result<(TokenVariety, usize), anyhow::Error> {
+    let mut seen_dot = false;
+
+    let (decimal, bytes_read) = take_while(data, |c| {
+        if c.is_digit(10) {
+            true
+        } else if c == '.' {
+            if !seen_dot {
+                seen_dot = true;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    })?;
+
+    if seen_dot {
+        let n: f64 = decimal.parse()?;
+        Ok((TokenVariety::Double(n), bytes_read))
+    } else {
+        let n: i128 = decimal.parse()?;
+        Ok((TokenVariety::Int(n), bytes_read))
+    }
+}
+
+fn skip_whitespace(data: &str) -> usize {
+    match take_while(data, |ch| ch.is_whitespace()) {
+        Ok((_, bytes_skipped)) => bytes_skipped,
+        _ => 0
+    }
+}
+
+fn ignore_comments(src: &str) -> usize {
+    let comment = [("/#", "#/"), ("/#", "\n")];
+
+    for &(pattern, matcher) in &comment {
+        if src.starts_with(pattern) {
+            let leftover = skip_until(src, matcher);
+            return src.len() - leftover.len();
+        }
+    }
+    0
+}
+
+fn skip_until<'a>(mut src: &'a str, pattern: &str) -> &'a str {
+    while !src.is_empty() && !src.starts_with(pattern) {
+        let next_char_size = src.chars().next().expect("The string is not empty").len_utf8();
+        src = &src[next_char_size..];
+    }
+
+    &src[pattern.len()..]
+}
+
+fn skip(src: &str) -> usize {
+    let mut remaining = src;
+
+    loop {
+        let whitespace = skip_whitespace(remaining);
+        remaining = &remaining[whitespace..];
+        let comments = ignore_comments(remaining);
+        remaining = &remaining[comments..];
+
+        if whitespace + comments == 0 {
+            return src.len() - remaining.len();
+        }
+    }
 }
 
 /// Consumes bytes while a predicate evaluates to true.
