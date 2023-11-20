@@ -1,0 +1,19 @@
+// as functions for compiled/interpreted
+
+Funct your_name_is(a, b)<c> {
+    c = a + b
+}
+
+Funct main() {
+    x = "Jingleheimer "
+    y = "Schmidt"
+    your_name_is(x, y)
+}
+
+// outputs Jingleheimer Schmidt
+
+// as purely interpreted
+
+x = "Jingleheimer"
+y = "Schmidt"
+x + y // outputs Jingleheimer Schmidt
