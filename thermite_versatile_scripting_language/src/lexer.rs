@@ -1,21 +1,12 @@
 // Lexer for the TVSL
-use anyhow::bail;
-use core::primitive::*;
-use std::primitive::char;
-use std::primitive::i64;
-use std::primitive::i128;
-use std::primitive::f32;
-use std::primitive::f64;
-use std::primitive::usize;
+use anyhow::{bail, Result};
 use std::io::ErrorKind;
 use std::str;
-use std::io::Result;
 use codemap::Span;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(missing_docs)]
 #[serde(tag = "type")]
-
 pub enum TokenVariety {
     Int(i128), // Integer
     Intu(u128), // Unsigned Integer
@@ -50,44 +41,33 @@ pub enum TokenVariety {
     Tilde,
     Ampersand,
     Percent,
-    Pound, 
+    Pound,
     At,
     Exclamation,
     Question,
-    Sinlequote,
+    Singlequote,
     Doublequote,
     Grave,
-    Dollarsign
+    Dollarsign,
 }
 
 pub enum FunctionTokens {
-    Funct { // how you enter a method/function
+    Funct {
         name: String,
         parameters: Vec<char>,
-        outputtype: (i64, i128, f32, f64, String, char, usize, isize, (), u64, u128)
+        outputtype: (i64, i128, f32, f64, String, char, usize, isize, (), u64, u128),
     },
     Enumerator {
-        name: String
-
+        name: String,
     },
     Structure {
-        name: String
+        name: String,
     },
-    Ifstatement {
-
-    },
-    Efstatment {
-
-    },
-    Elstatement {
-
-    },
-    Whilestatment {
-
-    },
-    Forstatment {
-
-    }
+    Ifstatement {},
+    IfstatementElse {},
+    Elsestatement {},
+    Whilestatement {},
+    Forstatement {},
 }
 
 impl From<String> for TokenVariety {
@@ -127,8 +107,8 @@ impl From<usize> for TokenVariety {
 }
 
 impl From<()> for TokenVariety {
-    fn from(dif: ()) -> TokenVariety {
-        TokenVariety::Unit(dif)
+    fn from(_: ()) -> TokenVariety {
+        TokenVariety::Unit(())
     }
 }
 
@@ -144,26 +124,26 @@ impl From<isize> for TokenVariety {
     }
 }
 
-fn get_tokenized_identity(data: &str) -> std::result::Result<(TokenVariety, usize), anyhow::Error> {
-    // identities never start with a num
+fn get_tokenized_identity(data: &str) -> Result<(TokenVariety, usize)> {
+    // Identities never start with a num
     match data.chars().next() {
         Some(ch) if ch.is_digit(10) => bail!("Error: Identity cannot start with a number!"),
-        None => bail!(ErrorKind::UnexpectedEOF),
+        None => bail!(ErrorKind::UnexpectedEof),
         _ => {}
     }
     let (got, bytes_read) = take_while(data, |ch| ch == '_' || ch.is_alphanumeric())?;
 
-    // TODO: identify keywords using match
+    // TODO: Identify keywords using match
 
     let token = TokenVariety::Identitystring(got.to_string());
     Ok((token, bytes_read))
 }
 
 // Tokenize number
-fn get_tokenized_number(data: &str) -> std::result::Result<(TokenVariety, usize), anyhow::Error> {
+fn get_tokenized_number(data: &str) -> Result<(TokenVariety, usize)> {
     let mut seen_dot = false;
 
-    let (Double, bytes_read) = take_while(data, |c| {
+    let (number, bytes_read) = take_while(data, |c| {
         if c.is_digit(10) {
             true
         } else if c == '.' {
@@ -179,10 +159,10 @@ fn get_tokenized_number(data: &str) -> std::result::Result<(TokenVariety, usize)
     })?;
 
     if seen_dot {
-        let n: f64 = Double.parse()?;
+        let n: f64 = number.parse()?;
         Ok((TokenVariety::Double(n), bytes_read))
     } else {
-        let n: i128 = Double.parse()?;
+        let n: i128 = number.parse()?;
         Ok((TokenVariety::Int(n), bytes_read))
     }
 }
@@ -190,7 +170,7 @@ fn get_tokenized_number(data: &str) -> std::result::Result<(TokenVariety, usize)
 fn skip_whitespace(data: &str) -> usize {
     match take_while(data, |ch| ch.is_whitespace()) {
         Ok((_, bytes_skipped)) => bytes_skipped,
-        _ => 0
+        _ => 0,
     }
 }
 
@@ -208,7 +188,7 @@ fn ignore_comments(src: &str) -> usize {
 
 fn skip_until<'a>(mut src: &'a str, pattern: &str) -> &'a str {
     while !src.is_empty() && !src.starts_with(pattern) {
-        let next_char_size = src.chars().next().expect("The string is not empty").len_utf8();
+        let next_char_size = src.chars().next().map_or(0, |c| c.len_utf8());
         src = &src[next_char_size..];
     }
 
@@ -232,8 +212,12 @@ fn skip(src: &str) -> usize {
 }
 
 /// Consumes bytes while a predicate evaluates to true.
-fn take_while<F>(data: &str, mut pred: F) -> std::result::Result<(&str, usize), anyhow::Error>  
-where F: FnMut(char) -> bool
+fn take_while<F>(
+    data: &str,
+    mut pred: F,
+) -> Result<(&str, usize)>
+where
+    F: FnMut(char) -> bool,
 {
     let mut current_index = 0;
 
@@ -248,17 +232,17 @@ where F: FnMut(char) -> bool
     }
 
     if current_index == 0 {
-        bail!("No Matches");
+        Err(anyhow::Error::msg("No Matches"))
     } else {
         Ok((&data[..current_index], current_index))
     }
 }
 
-// Get single token from the input
+// Get a single token from the input
 pub fn single_token_tokenizer(data: &str) -> Result<(TokenVariety, usize)> {
     let next = match data.chars().next() {
         Some(c) => c,
-        None => bail!(ErrorKind::UnexpectedEOF),
+        None => bail!(ErrorKind::UnexpectedEof),
     };
 
     let (token, length) = match next {
@@ -288,10 +272,17 @@ pub fn single_token_tokenizer(data: &str) -> Result<(TokenVariety, usize)> {
         '>' => (TokenVariety::Greaterthan, 1),
         '?' => (TokenVariety::Question, 1),
         '!' => (TokenVariety::Exclamation, 1),
-        '"' => (TokenVariety::Doublequote, 1),
-        '0'..='9' => get_tokenized_number(data).chain_error(|| "Cannot tokenize number data")?,
-        c @ '_' | c if c.is_alphabetic() => get_tokenized_identity(data).chain_err(|| "Cannot tokenize identifier data")?,
-        other => bail!(ErrorKind::UnknownCharacter(other)),
+        '"' => {
+            let (quoted_str, bytes_read) = take_while(data, |c| c != '"')?;
+            // Skip the closing quote
+            let bytes_read = bytes_read + 1;
+            (TokenVariety::Quotedstring(quoted_str.to_string()), bytes_read)
+        }
+        '\'' => (TokenVariety::Singlequote, 1),
+        '`' => (TokenVariety::Grave, 1),
+        '0'..='9' => get_tokenized_number(data).map_err(|e| e.into()),
+        c @ '_' | c if c.is_alphabetic() => get_tokenized_identity(data).map_err(|e| e.into()),
+        other => bail!(ErrorKind::Other(format!("Unknown character: {}", other))),
     };
 
     Ok((token, length))
@@ -317,14 +308,14 @@ impl<'a> Tokenizer<'a> {
             Ok(None)
         } else {
             let start = self.current_index;
-            let token = self._next_token().chain_err(|| ErrorKind::MessageWithLocation(self.current_index, "Cannot read next token"))?;
+            let token = self._next_token()?;
             let end = self.current_index;
             Ok(Some((token, start, end)))
         }
     }
 
     fn skip_whitespace(&mut self) {
-        let skipped = skip(self.remaining_text);
+        let skipped = skip_whitespace(self.remaining_text);
         self.chomp(skipped);
     }
 
@@ -336,12 +327,12 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn chomp(&mut self, num_bytes: usize) {
-        self.remaining_text = &self.remaining_text[num_bytes];
+        self.remaining_text = &self.remaining_text[num_bytes..];
         self.current_index += num_bytes;
     }
 }
 
-// Turn line of valid TVSL into its constituent tokens including its start and end point
+// Turn a line of valid TVSL into its constituent tokens, including its start and end point
 pub fn tokenize(src: &str) -> Result<Vec<(TokenVariety, usize, usize)>> {
     let mut tokenizer = Tokenizer::new(src);
     let mut tokens = Vec::new();
@@ -356,18 +347,20 @@ pub fn tokenize(src: &str) -> Result<Vec<(TokenVariety, usize, usize)>> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Token {
     pub span: Span,
-    pub variety: TokenVariety
+    pub variety: TokenVariety,
 }
 
 impl Token {
     pub fn new<K: Into<TokenVariety>>(span: Span, variety: K) -> Token {
         let variety = variety.into();
-        Token { span, variety}
+        Token { span, variety }
     }
 }
 
 impl<T> From<T> for Token
-where T: Into<TokenVariety> {
+where
+    T: Into<TokenVariety>,
+{
     fn from(other: T) -> Token {
         Token::new(Span::dummy(), other)
     }

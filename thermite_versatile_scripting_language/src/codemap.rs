@@ -183,7 +183,7 @@ impl FileMap {
     /// Register a set of tokenized inputs and turn them into a proper stream
     /// of tokens. Note that all the caveats from `insert_span()` also apply 
     /// here.
-    pub fn register_tokens(&self, tokens: Vec<(TokenVarietyd, usize, usize)>) -> Vec<Token> {
+    pub fn register_tokens(&self, tokens: Vec<(TokenVariety, usize, usize)>) -> Vec<Token> {
         let mut registered = Vec::new();
 
         for (kind, start, end) in tokens {
