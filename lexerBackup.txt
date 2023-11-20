@@ -1,5 +1,4 @@
 // Lexer for the TVSL
-use anyhow::bail;
 use core::primitive::*;
 use std::primitive::char;
 use std::primitive::i64;
@@ -10,7 +9,10 @@ use std::primitive::usize;
 use std::io::ErrorKind;
 use std::str;
 use std::io::Result;
+use anyhow::bail;
 use codemap::Span;
+use errors::*;
+
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(missing_docs)]
@@ -351,24 +353,4 @@ pub fn tokenize(src: &str) -> Result<Vec<(TokenVariety, usize, usize)>> {
     }
 
     Ok(tokens)
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Token {
-    pub span: Span,
-    pub variety: TokenVariety
-}
-
-impl Token {
-    pub fn new<K: Into<TokenVariety>>(span: Span, variety: K) -> Token {
-        let variety = variety.into();
-        Token { span, variety}
-    }
-}
-
-impl<T> From<T> for Token
-where T: Into<TokenVariety> {
-    fn from(other: T) -> Token {
-        Token::new(Span::dummy(), other)
-    }
 }

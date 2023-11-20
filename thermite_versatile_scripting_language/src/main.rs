@@ -10,6 +10,13 @@ mod driver;
 pub use driver::Driver;
 
 
+#[macro_use]
+mod macros;
+pub use self::parser::Parser;
+mod ast;
+pub use self::ast::{Literal, LiteralKind, Ident, DottedIdent};
+
+
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
