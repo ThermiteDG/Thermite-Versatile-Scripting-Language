@@ -51,10 +51,15 @@ pub enum TokenVariety {
     Dollarsign,
 }
 
+pub struct GenericToken {
+    
+}
+
 pub enum FunctionTokens {
     Funct {
         name: String,
         parameters: Vec<char>,
+        inputtype: (i64, i128, f32, f64, String, char, usize, isize, (), u64, u128),
         outputtype: (i64, i128, f32, f64, String, char, usize, isize, (), u64, u128),
     },
     Enumerator {
